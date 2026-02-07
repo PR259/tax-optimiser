@@ -1,17 +1,15 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo } from 'react';
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell,
   PieChart, Pie
 } from 'recharts';
 import { 
-  Calculator, 
   Users, 
   TrendingUp, 
   Settings, 
   Info, 
   ChevronRight,
-  Maximize2,
-  DollarSign
+  Maximize2
 } from 'lucide-react';
 
 /**
@@ -24,14 +22,13 @@ import {
  * 16 - 20L: 20%
  * 20 - 24L: 25%
  * Above 24L: 30%
- * Note: Rebate u/s 87A effectively makes income up to 12L tax-free in new regime (revised).
+ * Note: Rebate effectively makes income up to 12.75L CTC (12L + 75k SD) tax-free.
  */
 const calculateIndividualTax = (grossSalary) => {
   const standardDeduction = 75000;
   const taxableIncome = Math.max(0, grossSalary - standardDeduction);
 
-  // Effective rebate: In the latest proposed budget logic, if income <= 12L (after SD), tax is Nil.
-  // However, we calculate based on slabs for the simulator to be precise for higher brackets.
+  // In the latest regime, if taxable income <= 12L, tax is zero due to rebate
   if (taxableIncome <= 1200000) return 0;
 
   let tax = 0;
@@ -64,13 +61,13 @@ const COMPANY_TAX_RATE = 0.25168; // 25.168% inclusive of surcharge/cess
 
 const App = () => {
   // Inputs
-  const [revenue, setRevenue] = useState(5000000); // 50 Lakhs
-  const [fixedExpenses, setFixedExpenses] = useState(1000000); // 10 Lakhs
+  const [revenue, setRevenue] = useState(5000000); // 50 Lakhs default
+  const [fixedExpenses, setFixedExpenses] = useState(1000000); // 10 Lakhs default
   const [flexibleExpenses, setFlexibleExpenses] = useState(500000); // 5 Lakhs (Creative)
   const [numFamilyMembers, setNumFamilyMembers] = useState(2);
-  const [salaryPerMember, setSalaryPerMember] = useState(1200000); // 12 Lakhs
+  const [salaryPerMember, setSalaryPerMember] = useState(1200000); // 12 Lakhs default
 
-  // Derived Calculation for Current Scenario
+  // Core Calculator Logic
   const calculateScenario = (rev, fixedExp, flexExp, nMembers, salPerMember) => {
     const totalSalaryOutflow = nMembers * salPerMember;
     const totalExpenses = fixedExp + flexExp + totalSalaryOutflow;
@@ -91,7 +88,7 @@ const App = () => {
       indTax,
       totalFamilyNetSalary,
       totalRetained,
-      expenseRatio: (totalExpenses / rev) * 100
+      efficiency: (totalRetained / rev) * 100
     };
   };
 
@@ -100,12 +97,11 @@ const App = () => {
     [revenue, fixedExpenses, flexibleExpenses, numFamilyMembers, salaryPerMember]
   );
 
-  // Grid Search Analysis
-  // Variation 1: Salary Heatmap (Members vs Salary)
+  // Grid Search for Heatmap
+  const salarySteps = [0, 600000, 900000, 1200000, 1500000, 1800000, 2400000, 3000000];
+  const membersRange = [1, 2, 3, 4, 5, 6];
+
   const heatmapData = useMemo(() => {
-    const membersRange = [1, 2, 3, 4, 5, 6];
-    const salarySteps = [0, 600000, 900000, 1200000, 1500000, 1800000, 2400000, 3000000];
-    
     return membersRange.map(m => {
       const row = { members: m };
       salarySteps.forEach(s => {
@@ -116,27 +112,19 @@ const App = () => {
     });
   }, [revenue, fixedExpenses, flexibleExpenses]);
 
-  const salarySteps = [0, 600000, 900000, 1200000, 1500000, 1800000, 2400000, 3000000];
-
-  // Find max in heatmap for scaling colors
-  const maxRetained = Math.max(...heatmapData.flatMap(row => 
-    salarySteps.map(s => row[`sal_${s}`])
-  ));
-  const minRetained = Math.min(...heatmapData.flatMap(row => 
-    salarySteps.map(s => row[`sal_${s}`])
-  ));
+  // Scaling logic for colors
+  const allValues = heatmapData.flatMap(row => salarySteps.map(s => row[`sal_${s}`]));
+  const maxRetained = Math.max(...allValues);
+  const minRetained = Math.min(...allValues);
 
   const getHeatmapColor = (val) => {
     const ratio = (val - minRetained) / (maxRetained - minRetained);
-    // Gradient from Red (low) to Yellow (mid) to Green (high)
     if (ratio < 0.5) {
-      const r = 255;
       const g = Math.floor(255 * (ratio * 2));
-      return `rgba(${r}, ${g}, 0, 0.7)`;
+      return `rgba(239, 68, 68, ${0.1 + (1 - ratio) * 0.4})`; // Reddish
     } else {
       const r = Math.floor(255 * (1 - (ratio - 0.5) * 2));
-      const g = 255;
-      return `rgba(${r}, ${g}, 0, 0.7)`;
+      return `rgba(34, 197, 94, ${0.1 + ratio * 0.5})`; // Greenish
     }
   };
 
@@ -152,181 +140,175 @@ const App = () => {
     <div className="min-h-screen bg-slate-50 p-4 md:p-8 font-sans text-slate-900">
       <div className="max-w-7xl mx-auto space-y-8">
         
-        {/* Header */}
+        {/* Top Navigation / Header */}
         <header className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
-            <h1 className="text-3xl font-bold tracking-tight text-slate-800">Tax Optimization Simulator</h1>
-            <p className="text-slate-500">Pvt Ltd vs. Personal Income Strategy (FY 2025-26)</p>
+            <h1 className="text-3xl font-bold tracking-tight text-slate-800">Tax Strategy Optimizer</h1>
+            <p className="text-slate-500">Pvt Ltd vs Personal Income Simulator (New Regime 2025)</p>
           </div>
-          <div className="bg-blue-600 text-white px-6 py-3 rounded-2xl shadow-lg flex items-center gap-3">
-            <Maximize2 size={24} />
+          <div className="bg-emerald-600 text-white px-6 py-4 rounded-3xl shadow-xl flex items-center gap-4 transition-transform hover:scale-105">
+            <div className="p-2 bg-white/20 rounded-full">
+              <Maximize2 size={24} />
+            </div>
             <div>
-              <div className="text-xs opacity-80 uppercase font-bold tracking-wider">Current Retained Earnings</div>
-              <div className="text-xl font-bold">{formatCurrency(currentResults.totalRetained)}</div>
+              <div className="text-xs opacity-90 uppercase font-bold tracking-wider">Total Family Retention</div>
+              <div className="text-2xl font-black">{formatCurrency(currentResults.totalRetained)}</div>
             </div>
           </div>
         </header>
 
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
           
-          {/* Controls Panel */}
+          {/* Settings Sidebar */}
           <aside className="lg:col-span-4 space-y-6">
-            <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-200">
-              <div className="flex items-center gap-2 mb-6 text-blue-600">
+            <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-200">
+              <div className="flex items-center gap-2 mb-8 text-indigo-600">
                 <Settings size={20} />
-                <h2 className="font-bold text-lg">Input Parameters</h2>
+                <h2 className="font-bold text-lg uppercase tracking-tight">Simulator Config</h2>
               </div>
 
-              <div className="space-y-6">
+              <div className="space-y-8">
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-2 flex justify-between">
-                    Gross Annual Revenue <span>{formatCurrency(revenue)}</span>
-                  </label>
+                  <div className="flex justify-between mb-2">
+                    <label className="text-sm font-bold text-slate-600">Annual Revenue</label>
+                    <span className="text-indigo-600 font-bold">{formatCurrency(revenue)}</span>
+                  </div>
                   <input 
                     type="range" min="1000000" max="50000000" step="500000"
                     value={revenue} onChange={(e) => setRevenue(Number(e.target.value))}
-                    className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
+                    className="w-full h-2 bg-slate-100 rounded-lg appearance-none cursor-pointer accent-indigo-600"
                   />
                 </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-2">Flexible Expenses (Creative)</label>
-                  <div className="relative">
-                    <span className="absolute left-3 top-2 text-slate-400">₹</span>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold text-slate-400 uppercase">Fixed Exp</label>
+                    <input 
+                      type="number" value={fixedExpenses} onChange={(e) => setFixedExpenses(Number(e.target.value))}
+                      className="w-full p-3 bg-slate-50 border border-slate-200 rounded-2xl text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold text-slate-400 uppercase">Flexible Exp</label>
                     <input 
                       type="number" value={flexibleExpenses} onChange={(e) => setFlexibleExpenses(Number(e.target.value))}
-                      className="w-full pl-8 pr-4 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none"
+                      className="w-full p-3 bg-slate-50 border border-slate-200 rounded-2xl text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
                     />
                   </div>
-                  <p className="text-[10px] text-slate-400 mt-1 italic">Subscriptions, Car, Office Upgrades, etc.</p>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-2 flex items-center gap-1">
-                      <Users size={14}/> Members
-                    </label>
+                <div className="pt-6 border-t border-slate-100 grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold text-slate-400 uppercase flex items-center gap-1"><Users size={12}/> Family Size</label>
                     <select 
                       value={numFamilyMembers} onChange={(e) => setNumFamilyMembers(Number(e.target.value))}
-                      className="w-full p-2 border border-slate-200 rounded-xl outline-none"
+                      className="w-full p-3 bg-slate-50 border border-slate-200 rounded-2xl text-sm outline-none"
                     >
-                      {[1,2,3,4,5,6].map(n => <option key={n} value={n}>{n}</option>)}
+                      {[1,2,3,4,5,6].map(n => <option key={n} value={n}>{n} Members</option>)}
                     </select>
                   </div>
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-2">Salary / Head</label>
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold text-slate-400 uppercase">Sal / Member</label>
                     <input 
                       type="number" value={salaryPerMember} onChange={(e) => setSalaryPerMember(Number(e.target.value))}
-                      className="w-full p-2 border border-slate-200 rounded-xl outline-none"
+                      className="w-full p-3 bg-slate-50 border border-slate-200 rounded-2xl text-sm outline-none"
                     />
-                  </div>
-                </div>
-
-                <div className="pt-4 border-t border-slate-100">
-                  <div className="bg-blue-50 p-4 rounded-2xl flex items-start gap-3">
-                    <Info size={18} className="text-blue-500 mt-0.5" />
-                    <div className="text-xs text-blue-800 leading-relaxed">
-                      <strong>Tax Logic:</strong> Corporate Tax is 25.168%. Individual Salary follows New Regime (Standard Deduction ₹75k included). Effective 0% tax up to ₹12.75L CTC.
-                    </div>
                   </div>
                 </div>
               </div>
             </div>
 
-            {/* Quick Metrics */}
-            <div className="bg-slate-800 text-white p-6 rounded-3xl shadow-xl space-y-4">
-               <div className="flex justify-between items-center text-sm opacity-70">
-                 <span>Efficiency Metric</span>
-                 <span className="bg-green-500/20 text-green-300 px-2 py-0.5 rounded text-[10px]">HEALTHY</span>
-               </div>
-               <div className="text-3xl font-bold">
-                 {((currentResults.totalRetained / revenue) * 100).toFixed(1)}%
-                 <span className="text-sm font-normal opacity-60 ml-2">Retained</span>
-               </div>
-               <div className="grid grid-cols-2 gap-2 text-xs">
-                 <div className="bg-white/10 p-2 rounded-lg text-center">
-                    <div className="opacity-60 mb-1">Company Tax</div>
-                    <div className="font-bold">{formatCurrency(currentResults.companyTax)}</div>
-                 </div>
-                 <div className="bg-white/10 p-2 rounded-lg text-center">
-                    <div className="opacity-60 mb-1">Family Ind. Tax</div>
-                    <div className="font-bold">{formatCurrency(currentResults.indTax * numFamilyMembers)}</div>
+            <div className="bg-indigo-900 text-white p-8 rounded-[2rem] shadow-xl relative overflow-hidden">
+               <div className="relative z-10 space-y-4">
+                 <div className="text-xs font-bold text-indigo-300 uppercase">Efficiency Score</div>
+                 <div className="text-5xl font-black">{currentResults.efficiency.toFixed(1)}%</div>
+                 <p className="text-xs text-indigo-200 leading-relaxed">
+                   This percentage represents how much of your gross revenue stays in your control after all taxes.
+                 </p>
+                 <div className="flex gap-2 pt-2">
+                    <div className="flex-1 bg-white/10 p-3 rounded-2xl">
+                      <div className="text-[10px] opacity-60">Corp Tax</div>
+                      <div className="font-bold text-sm">{formatCurrency(currentResults.companyTax)}</div>
+                    </div>
+                    <div className="flex-1 bg-white/10 p-3 rounded-2xl">
+                      <div className="text-[10px] opacity-60">Indiv. Tax</div>
+                      <div className="font-bold text-sm">{formatCurrency(currentResults.indTax * numFamilyMembers)}</div>
+                    </div>
                  </div>
                </div>
+               <div className="absolute -right-8 -top-8 w-32 h-32 bg-indigo-500/20 rounded-full blur-2xl"></div>
             </div>
           </aside>
 
-          {/* Main Analysis Section */}
+          {/* Visualization Area */}
           <main className="lg:col-span-8 space-y-8">
             
-            {/* Breakout Charts */}
+            {/* Charts Row */}
             <section className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm h-80">
-                <h3 className="text-sm font-bold text-slate-500 mb-4 uppercase tracking-wider">Cashflow Distribution</h3>
-                <ResponsiveContainer width="100%" height="90%">
-                  <PieChart>
-                    <Pie
-                      data={[
-                        { name: 'Fixed Exp', value: fixedExpenses },
-                        { name: 'Flex Exp', value: flexibleExpenses },
-                        { name: 'Company Tax', value: currentResults.companyTax },
-                        { name: 'Retained Earnings', value: currentResults.totalRetained },
-                      ]}
-                      cx="50%" cy="50%" innerRadius={60} outerRadius={80} paddingAngle={5} dataKey="value"
-                    >
-                      {[0,1,2,3].map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={['#cbd5e1', '#94a3b8', '#f43f5e', '#10b981'][index]} />
-                      ))}
-                    </Pie>
-                    <Tooltip formatter={(value) => formatCurrency(value)} />
-                    <Legend verticalAlign="bottom" height={36}/>
-                  </PieChart>
-                </ResponsiveContainer>
+              <div className="bg-white p-6 rounded-[2rem] border border-slate-200 shadow-sm">
+                <h3 className="text-xs font-black text-slate-400 uppercase mb-6 tracking-widest">Revenue Leakage</h3>
+                <div className="h-64">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={[
+                          { name: 'Expenses', value: fixedExpenses + flexibleExpenses },
+                          { name: 'Tax Leakage', value: currentResults.companyTax + (currentResults.indTax * numFamilyMembers) },
+                          { name: 'Family Wealth', value: currentResults.totalRetained },
+                        ]}
+                        innerRadius={60} outerRadius={80} paddingAngle={8} dataKey="value"
+                      >
+                        {[0,1,2].map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={['#e2e8f0', '#f43f5e', '#10b981'][index]} />
+                        ))}
+                      </Pie>
+                      <Tooltip formatter={(v) => formatCurrency(v)} />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
               </div>
 
-              <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm h-80">
-                <h3 className="text-sm font-bold text-slate-500 mb-4 uppercase tracking-wider">Family Income Source</h3>
-                <ResponsiveContainer width="100%" height="90%">
-                  <BarChart
-                    data={[
-                      { name: 'Direct Net Salary', val: currentResults.totalFamilyNetSalary },
-                      { name: 'Company PAT', val: currentResults.pat }
-                    ]}
-                  >
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                    <XAxis dataKey="name" axisLine={false} tickLine={false} />
-                    <YAxis axisLine={false} tickLine={false} hide />
-                    <Tooltip formatter={(value) => formatCurrency(value)} />
-                    <Bar dataKey="val" radius={[10, 10, 0, 0]}>
-                      <Cell fill="#3b82f6" />
-                      <Cell fill="#8b5cf6" />
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
+              <div className="bg-white p-6 rounded-[2rem] border border-slate-200 shadow-sm">
+                <h3 className="text-xs font-black text-slate-400 uppercase mb-6 tracking-widest">Income Breakdown</h3>
+                <div className="h-64">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart
+                      data={[
+                        { name: 'Family Salaries', val: currentResults.totalFamilyNetSalary },
+                        { name: 'Company PAT', val: currentResults.pat }
+                      ]}
+                    >
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                      <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fontSize: 10}} />
+                      <YAxis hide />
+                      <Tooltip formatter={(v) => formatCurrency(v)} />
+                      <Bar dataKey="val" radius={[12, 12, 0, 0]}>
+                        <Cell fill="#6366f1" />
+                        <Cell fill="#a855f7" />
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
               </div>
             </section>
 
             {/* Heatmap Section */}
-            <section className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm">
-              <div className="flex items-center justify-between mb-6">
+            <section className="bg-white p-8 rounded-[2rem] border border-slate-200 shadow-sm">
+              <div className="flex items-center justify-between mb-8">
                 <div>
-                  <h3 className="font-bold text-lg text-slate-800">Optimization Heatmap</h3>
-                  <p className="text-xs text-slate-500">Finding the sweet spot between Number of Members and Salary</p>
-                </div>
-                <div className="flex items-center gap-2 text-[10px] text-slate-400">
-                  <div className="w-3 h-3 bg-red-400 rounded"></div> Low Retained
-                  <div className="w-3 h-3 bg-green-400 rounded ml-2"></div> High Retained
+                  <h3 className="font-bold text-xl text-slate-800">Optimization Heatmap</h3>
+                  <p className="text-sm text-slate-400">Total Family Retained Earnings in Lakhs (L)</p>
                 </div>
               </div>
 
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
+              <div className="overflow-x-auto rounded-2xl border border-slate-100">
+                <table className="w-full border-collapse">
                   <thead>
                     <tr>
-                      <th className="p-3 bg-slate-50 rounded-tl-xl text-slate-400 font-medium border-b border-slate-100">Members</th>
+                      <th className="p-4 bg-slate-50 text-slate-400 font-bold text-[10px] border-b border-slate-100">Members</th>
                       {salarySteps.map(s => (
-                        <th key={s} className="p-3 bg-slate-50 text-slate-400 font-medium border-b border-slate-100">
-                          {s/100000}L
+                        <th key={s} className="p-4 bg-slate-50 text-slate-600 font-bold text-xs border-b border-slate-100">
+                          {s === 0 ? '0' : (s/100000) + 'L'}
                         </th>
                       ))}
                     </tr>
@@ -334,7 +316,7 @@ const App = () => {
                   <tbody>
                     {heatmapData.map((row, idx) => (
                       <tr key={idx}>
-                        <td className="p-3 font-bold text-slate-600 bg-slate-50/50 border-r border-slate-100 text-center">
+                        <td className="p-4 font-black text-slate-500 bg-slate-50/50 border-r border-slate-100 text-center text-sm">
                           {row.members}
                         </td>
                         {salarySteps.map(s => {
@@ -343,21 +325,21 @@ const App = () => {
                           return (
                             <td 
                               key={s} 
-                              className={`p-3 text-[10px] text-center transition-all cursor-help relative group`}
+                              className="p-4 text-center transition-all cursor-default relative group border border-slate-50"
                               style={{ backgroundColor: getHeatmapColor(val) }}
-                              title={`${row.members} members @ ${s/100000}L each = ${formatCurrency(val)}`}
                             >
-                              <span className="font-semibold text-slate-800">
+                              <span className="font-bold text-slate-800 text-xs">
                                 {(val/100000).toFixed(1)}L
                               </span>
                               {isCurrent && (
-                                <div className="absolute -top-1 -right-1 w-3 h-3 bg-blue-600 rounded-full border-2 border-white shadow-sm z-10 animate-pulse"></div>
+                                <div className="absolute inset-0 border-4 border-indigo-600 z-10 pointer-events-none"></div>
                               )}
                               
-                              {/* Hover Tooltip */}
-                              <div className="absolute hidden group-hover:block bottom-full left-1/2 -translate-x-1/2 mb-2 w-32 bg-slate-900 text-white p-2 rounded-lg text-[9px] z-20 pointer-events-none">
-                                Total: {formatCurrency(val)}
-                                <div className="absolute top-full left-1/2 -translate-x-1/2 border-8 border-transparent border-t-slate-900"></div>
+                              <div className="absolute hidden group-hover:block bottom-full left-1/2 -translate-x-1/2 mb-2 w-40 bg-slate-900 text-white p-3 rounded-xl text-[10px] z-20 shadow-2xl">
+                                <div className="font-bold border-b border-white/20 pb-1 mb-1">Scenario Details</div>
+                                <div>Members: {row.members}</div>
+                                <div>Sal: {formatCurrency(s)}</div>
+                                <div className="text-emerald-400 mt-1">Net Retained: {formatCurrency(val)}</div>
                               </div>
                             </td>
                           );
@@ -367,33 +349,36 @@ const App = () => {
                   </tbody>
                 </table>
               </div>
-              <div className="mt-4 flex items-center gap-2 text-[11px] text-slate-400 italic">
-                <ChevronRight size={14} className="text-blue-500" />
-                The values in the grid represent the Total Family Retained Earnings (Company PAT + Total Net Salaries) in Lakhs.
+              <div className="mt-6 flex items-center gap-2 text-xs text-slate-400 bg-slate-50 p-4 rounded-2xl">
+                <Info size={16} className="text-indigo-500" />
+                <span>The grid highlights the total family wealth (Company Profits + Individual Net Salaries) for different configurations.</span>
               </div>
             </section>
 
-            {/* Strategic Advice */}
-            <section className="bg-gradient-to-br from-blue-500 to-indigo-600 p-8 rounded-3xl text-white shadow-xl relative overflow-hidden">
-               <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
-                 <div className="space-y-2">
-                   <h3 className="text-xl font-bold flex items-center gap-2">
-                     <TrendingUp size={24} /> Optimal Strategy Recommendation
+            {/* Final Strategy Card */}
+            <section className="bg-gradient-to-r from-indigo-600 to-violet-700 p-8 rounded-[2rem] text-white shadow-2xl relative overflow-hidden">
+               <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-8">
+                 <div className="space-y-3">
+                   <h3 className="text-2xl font-black flex items-center gap-3">
+                     <TrendingUp size={28} /> Strategy Insights
                    </h3>
-                   <p className="text-blue-100 max-w-md">
-                     Based on your revenue of {formatCurrency(revenue)}, taking {numFamilyMembers} members to a salary of {formatCurrency(salaryPerMember)} is currently yielding {formatCurrency(currentResults.totalRetained)}.
-                   </p>
+                   <div className="max-w-md space-y-2">
+                     <p className="text-indigo-100 text-sm leading-relaxed">
+                       Your current setup retains <strong>{formatCurrency(currentResults.totalRetained)}</strong> annually.
+                     </p>
+                     <p className="text-indigo-200 text-xs italic">
+                       {salaryPerMember > 1275000 
+                         ? "Tip: You've exceeded the 0% tax bracket per member. Adding more family members at lower salaries might increase overall retention."
+                         : "Insight: You are currently utilizing the tax-free individual threshold effectively."}
+                     </p>
+                   </div>
                  </div>
-                 <div className="bg-white/20 backdrop-blur-md p-6 rounded-2xl">
-                    <p className="text-xs uppercase font-bold opacity-80 mb-1">Expert Tip</p>
-                    <p className="text-sm font-medium">
-                      {salaryPerMember > 1275000 
-                        ? "You've crossed the zero-tax threshold for members. Consider increasing 'Creative Flexible Expenses' to reduce Company PBT before paying 30% individual tax."
-                        : "Staying below ₹12.75L (CTC) per person is highly tax efficient as individual tax remains near zero in the new regime."}
-                    </p>
+                 <div className="bg-white/10 backdrop-blur-xl p-6 rounded-3xl border border-white/20">
+                    <div className="text-[10px] uppercase font-bold text-indigo-200 mb-2">Optimal Threshold</div>
+                    <div className="text-3xl font-black">₹12.75L</div>
+                    <div className="text-[10px] opacity-70">Max CTC for 0% Tax / Member</div>
                  </div>
                </div>
-               <div className="absolute -right-12 -bottom-12 w-64 h-64 bg-white/10 rounded-full blur-3xl"></div>
             </section>
           </main>
         </div>
